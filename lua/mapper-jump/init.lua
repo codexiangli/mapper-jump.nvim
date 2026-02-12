@@ -1,4 +1,4 @@
--- 终端 Neovim：从 Mapper 接口跳转到对应 XML 的 id="方法名"
+--- 终端 Neovim：从 Mapper 接口跳转到对应 XML 的 id="方法名"
 local M = {}
 
 --- 从当前行解析出方法名（简单匹配）
@@ -40,6 +40,53 @@ end
 ---@return number|nil
 local function find_id_line(content, method_name)
 	local pattern = "id%s*=%s*[\"']" .. vim.pesc(method_name) .. "[\"']"
+	for i, line in ipairs(vim.split(content, "\n")) do
+		if line:match(pattern) then
+			return i
+		end
+	end
+	return nil
+end
+
+--- 从当前行解析 id="methodName" 或 id='methodName'
+---@return string|nil
+local function get_id_under_cursor()
+	local line = vim.api.nvim_get_current_line()
+	local id = line:match("id%s*=%s*[\"']([%w_]+)[\"']")
+	return id
+end
+
+--- 从 XML 内容中读取 mapper namespace（Mapper 接口全类名）
+---@param content string
+---@return string|nil
+local function get_mapper_namespace(content)
+	return content:match("<mapper%s+[^>]*namespace%s*=%s*[\"']([^\"']+)[\"']")
+end
+
+--- 根据 namespace 全类名在项目根下查找 Mapper.java
+---@param root string
+---@param namespace string 如 com.aihuishou.service.operation.persistence.TransferDetailMapper
+---@return string|nil
+local function find_java_by_namespace(root, namespace)
+	local path_suffix = namespace:gsub("%.", "/") .. ".java"
+	local cmd = string.format(
+		"find %s -type f -path '*src/main/java/%s' 2>/dev/null | head -1",
+		vim.fn.shellescape(root),
+		vim.fn.shellescape(path_suffix)
+	)
+	local out = vim.fn.system(cmd)
+	if out and out ~= "" then
+		return vim.trim(out)
+	end
+	return nil
+end
+
+--- 在 Java 文件内容中查找方法声明的行号（方法名(）
+---@param content string
+---@param method_name string
+---@return number|nil
+local function find_method_line_in_java(content, method_name)
+	local pattern = vim.pesc(method_name) .. "%s*%("
 	for i, line in ipairs(vim.split(content, "\n")) do
 		if line:match(pattern) then
 			return i
@@ -110,6 +157,46 @@ function M.jump_to_xml()
 	end
 
 	vim.cmd("edit " .. vim.fn.fnameescape(xml_path))
+	vim.api.nvim_win_set_cursor(0, { line, 0 })
+	vim.cmd("normal! zz")
+end
+
+--- 从 Mapper.xml 跳转到对应 Mapper 接口的当前 id 方法（终端 Neovim 用，可绑到 gd）
+function M.jump_to_java()
+	local buf_path = vim.api.nvim_buf_get_name(0)
+	if not buf_path:match("Mapper%.xml$") then
+		vim.notify("[mapper_jump] 当前文件不是 Mapper XML", vim.log.levels.WARN)
+		return
+	end
+
+	local method = get_id_under_cursor()
+	if not method then
+		vim.notify('[mapper_jump] 光标不在 id="方法名" 上', vim.log.levels.WARN)
+		return
+	end
+
+	local content = table.concat(vim.fn.readfile(buf_path), "\n")
+	local namespace = get_mapper_namespace(content)
+	if not namespace then
+		vim.notify('[mapper_jump] 未找到 <mapper namespace="...">', vim.log.levels.WARN)
+		return
+	end
+
+	local root = vim.fs.root(0, { ".git", "pom.xml", "mvnw" }) or vim.fn.getcwd()
+	local java_path = find_java_by_namespace(root, namespace)
+	if not java_path or vim.fn.filereadable(java_path) ~= 1 then
+		vim.notify("[mapper_jump] 未找到 " .. namespace, vim.log.levels.WARN)
+		return
+	end
+
+	local java_content = table.concat(vim.fn.readfile(java_path), "\n")
+	local line = find_method_line_in_java(java_content, method)
+	if not line then
+		vim.notify("[mapper_jump] 接口中未找到方法 " .. method, vim.log.levels.WARN)
+		return
+	end
+
+	vim.cmd("edit " .. vim.fn.fnameescape(java_path))
 	vim.api.nvim_win_set_cursor(0, { line, 0 })
 	vim.cmd("normal! zz")
 end
