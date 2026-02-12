@@ -19,21 +19,6 @@ local function get_method_name_under_cursor()
 	return nil
 end
 
---- 根据 Mapper Java 路径推导 XML 路径
---- 例: .../operation-service/src/main/java/.../persistence/TransferDetailMapper.java
----  -> .../operation-service/src/main/resources/.../map/TransferDetailMapper.xml
----@param java_path string
----@return string|nil
-local function java_path_to_xml_path(java_path)
-	if not java_path:match("Mapper%.java$") then
-		return nil
-	end
-	local xml = java_path:gsub("/src/main/java/", "/src/main/resources/"):gsub("%.java$", ".xml")
-	-- 最后一级目录（persistence/config/...）统一为 map
-	xml = xml:gsub("/([^/]+)/([^/]+%.xml)$", "/map/%2")
-	return xml
-end
-
 --- 在文件内容中查找 id="methodName" 或 id='methodName' 的行号
 ---@param content string
 ---@param method_name string
@@ -93,6 +78,21 @@ local function find_method_line_in_java(content, method_name)
 		end
 	end
 	return nil
+end
+
+--- 根据 Mapper Java 路径推导 XML 路径
+--- 例: .../operation-service/src/main/java/.../AaaMapper.java
+---  -> .../operation-service/src/main/resources/AaaMapper.xml
+---@param java_path string
+---@return string|nil
+local function java_path_to_xml_path(java_path)
+	if not java_path:match("Mapper%.java$") then
+		return nil
+	end
+	print("尝试按约定路径查找 XML: " .. java_path)
+	local xml = java_path:gsub("^(.*/src/main/)java/.*/([^/]+)%.java$", "%1resources/mapper/%2.xml")
+	print("推导出的 XML 路径: " .. xml)
+	return xml
 end
 
 --- 在项目根下查找 Mapper.xml（可能在不同模块）
