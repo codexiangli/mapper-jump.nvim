@@ -89,9 +89,7 @@ local function java_path_to_xml_path(java_path)
 	if not java_path:match("Mapper%.java$") then
 		return nil
 	end
-	print("尝试按约定路径查找 XML: " .. java_path)
 	local xml = java_path:gsub("^(.*/src/main/)java/.*/([^/]+)%.java$", "%1resources/mapper/%2.xml")
-	print("推导出的 XML 路径: " .. xml)
 	return xml
 end
 
