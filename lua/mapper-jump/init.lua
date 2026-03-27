@@ -99,7 +99,7 @@ end
 ---@return string|nil
 local function find_xml_in_project(root, mapper_basename)
 	local cmd = string.format(
-		"find %s -path '*/target' -prune -o -name %s -type f -print 2>/dev/null | head -1",
+		"find %s -type d -name target -prune -o -name %s -type f -print 2>/dev/null | head -1",
 		vim.fn.shellescape(root),
 		vim.fn.shellescape(mapper_basename)
 	)
